@@ -1,0 +1,17 @@
+# Local secrets and backup artifacts
+backups/
+.env
+.env.*
+!.env.example
+*.local
+*.log
+
+# Build output and dependencies
+**/target/
+**/node_modules/
+**/dist/
+
+# Editor and OS files
+.idea/
+.DS_Store
+Thumbs.db
