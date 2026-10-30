@@ -12,12 +12,50 @@ const INITIAL_FORM = {
   confirmPassword: '',
 };
 
+const EyeIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    width="18"
+    height="18"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+const EyeOffIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    width="18"
+    height="18"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path d="M10.6 5.2A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a17.5 17.5 0 0 1-3.2 4.1M6.5 6.6C3.7 8.5 2 12 2 12s3.5 7 10 7a10.9 10.9 0 0 0 5.5-1.5" />
+    <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+    <path d="m2 2 20 20" />
+  </svg>
+);
+
 const AuthPage = ({ theme, onToggleTheme, onAuthenticated, initialError = '' }) => {
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState(INITIAL_FORM);
   const [fieldErrors, setFieldErrors] = useState({});
   const [serverError, setServerError] = useState(initialError || '');
   const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const isRegister = mode === 'register';
 
@@ -38,6 +76,7 @@ const AuthPage = ({ theme, onToggleTheme, onAuthenticated, initialError = '' }) 
     setMode(nextMode);
     setFieldErrors({});
     setServerError('');
+    setShowPassword(false);
     setForm((current) => ({
       ...INITIAL_FORM,
       email: current.email,
@@ -240,18 +279,48 @@ const AuthPage = ({ theme, onToggleTheme, onAuthenticated, initialError = '' }) 
 
             <div className="form-group">
               <label htmlFor="auth-password">Password</label>
-              <input
-                id="auth-password"
-                name="password"
-                type="password"
-                autoComplete={isRegister ? 'new-password' : 'current-password'}
-                placeholder={isRegister ? 'At least 8 characters' : 'Your password'}
-                value={form.password}
-                onChange={updateField}
-                maxLength={72}
-                aria-invalid={Boolean(fieldErrors.password)}
-                aria-describedby={fieldErrors.password ? 'auth-password-error' : undefined}
-              />
+              <div style={{ position: 'relative' }}>
+                <input
+                  id="auth-password"
+                  name="password"
+                  type={!isRegister && showPassword ? 'text' : 'password'}
+                  autoComplete={isRegister ? 'new-password' : 'current-password'}
+                  placeholder={isRegister ? 'At least 8 characters' : 'Your password'}
+                  value={form.password}
+                  onChange={updateField}
+                  maxLength={72}
+                  style={!isRegister ? { paddingRight: '40px' } : undefined}
+                  aria-invalid={Boolean(fieldErrors.password)}
+                  aria-describedby={fieldErrors.password ? 'auth-password-error' : undefined}
+                />
+                {!isRegister && (
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((visible) => !visible)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                    style={{
+                      position: 'absolute',
+                      top: '50%',
+                      right: '6px',
+                      transform: 'translateY(-50%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '28px',
+                      height: '28px',
+                      padding: 0,
+                      border: 0,
+                      background: 'transparent',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                  </button>
+                )}
+              </div>
               {fieldErrors.password && (
                 <p className="field-error" id="auth-password-error">{fieldErrors.password}</p>
               )}

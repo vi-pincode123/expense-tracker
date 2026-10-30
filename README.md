@@ -69,11 +69,14 @@ expense rows through the expense API.
 ## Prerequisites
 
 - Java 21
-- Maven 3.9+
 - Node.js 18+ and npm
 - MySQL 8
+- Maven 3.9+ — optional; the repository includes a Maven Wrapper (`backend\mvnw.cmd`)
 
-On Windows, use `npm.cmd` in PowerShell and `mvn.cmd` if `mvn` is not on `PATH`.
+On Windows, use `npm.cmd` in PowerShell. Run every command below from the repository root
+unless a step says otherwise, so the paths work regardless of where the project is cloned.
+The included Maven Wrapper downloads Maven 3.9.9 on first use, so a system Maven install is
+not required; if you already have Maven 3.9+, `mvn.cmd` works too.
 
 ## Environment Variables
 
@@ -87,6 +90,7 @@ The backend requires these variables:
 | `DB_URL` | No | Defaults to `jdbc:mysql://localhost:3306/expense_tracker?...` |
 | `JWT_EXPIRATION_MS` | No | Token lifetime; defaults to `3600000` (1 hour) |
 | `CORS_ALLOWED_ORIGINS` | No | Comma-separated origins; defaults to `http://localhost:5173` |
+| `SERVER_PORT` | No | Backend HTTP port; defaults to `8080`. Use it if `8080` is already taken |
 
 One-time first-admin bootstrap variables:
 
@@ -100,14 +104,21 @@ One-time first-admin bootstrap variables:
 `backend/.env.example` is a checklist, not an automatically loaded file. Set the values in
 your shell, IDE run configuration, or process manager. Never commit real credentials.
 
-The frontend uses `VITE_API_BASE_URL` and defaults to `http://localhost:8080/api`:
+The frontend requires `VITE_API_BASE_URL`, including the `/api` suffix:
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `VITE_API_BASE_URL` | Yes | Backend API base URL, for example `http://localhost:8080/api` |
+
+Create `frontend/.env` from `frontend/.env.example`:
 
 ```text
 frontend/.env
 VITE_API_BASE_URL=http://localhost:8080/api
 ```
 
-See `frontend/.env.example`. Restart Vite after changing an environment variable.
+Restart Vite after changing an environment variable. If the value is missing, the frontend
+reports a configuration error instead of silently calling a hardcoded backend URL.
 
 ## Fresh Installation
 
@@ -116,15 +127,20 @@ See `frontend/.env.example`. Restart Vite after changing an environment variable
 From the project root:
 
 ```powershell
-Get-Content .\database\schema.sql -Raw | & "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root -p
+# mysql.exe is normally on PATH after a standard MySQL install.
+# If it is not, point $mysql at your own installation:
+# $mysql = "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe"
+$mysql = "mysql"
+
+Get-Content .\database\schema.sql -Raw | & $mysql -u root -p
 ```
 
 Or open `database/schema.sql` in MySQL Workbench and execute it. The schema creates an empty
 `users` table, an `expenses` table whose `owner_id` is required, and a `recurring_expenses`
 table with the same ownership rule.
 
-If MySQL is on `PATH`, run the redirection through `cmd.exe` because PowerShell does not
-support the `<` input operator:
+If `mysql` is on `PATH`, you can also use the redirection through `cmd.exe` because PowerShell
+does not support the `<` input operator:
 
 ```powershell
 cmd /c "mysql -u root -p < database\schema.sql"
@@ -132,8 +148,9 @@ cmd /c "mysql -u root -p < database\schema.sql"
 
 ### 2. Start the backend and create the first admin
 
-In PowerShell, set the required values. Generate a JWT secret once and save it somewhere
-secure; reusing the same secret keeps existing sessions valid across restarts.
+From the repository root, in PowerShell, set the required values. Generate a JWT secret once
+and save it somewhere secure; reusing the same secret keeps existing sessions valid across
+restarts.
 
 ```powershell
 $env:DB_USERNAME = "root"
@@ -144,9 +161,13 @@ $env:BOOTSTRAP_ADMIN_NAME = "Your Name"
 $env:BOOTSTRAP_ADMIN_EMAIL = "you@example.com"
 $env:BOOTSTRAP_ADMIN_PASSWORD = "choose-a-strong-password"
 
-cd C:\expense-tracker\backend
-mvn spring-boot:run
+cd .\backend
+.\mvnw.cmd spring-boot:run
 ```
+
+If you already have Maven installed, `mvn.cmd spring-boot:run` is equivalent. To use a
+different port, set `$env:SERVER_PORT = "8081"` before starting and update
+`VITE_API_BASE_URL` to match.
 
 The log should report that the first administrator was created. Stop the backend with
 `Ctrl+C`, then remove the bootstrap variables from that shell:
@@ -163,27 +184,42 @@ available, but new accounts are always standard users.
 
 ### 3. Start the frontend
 
+In a second PowerShell terminal, change to the repository root first, then create the frontend
+environment file, install, and start Vite:
+
 ```powershell
-cd C:\expense-tracker\frontend
+cd .\frontend
+Copy-Item .env.example .env
+notepad .env
 npm.cmd install
 npm.cmd run dev
 ```
+
+Confirm `VITE_API_BASE_URL` points at the running backend (`http://localhost:8080/api` by
+default).
 
 Open http://localhost:5173. Register a standard user or sign in with the admin account.
 
 ### 4. Production-style build
 
+Run each block from the repository root, in separate terminals:
+
 ```powershell
-cd C:\expense-tracker\backend
-mvn.cmd clean package
+cd .\backend
+.\mvnw.cmd clean package
 java -jar .\target\expense-tracker-backend-0.0.1-SNAPSHOT.jar
 ```
 
 ```powershell
-cd C:\expense-tracker\frontend
+cd .\frontend
 npm.cmd run build
 npm.cmd run preview
 ```
+
+`vite preview` serves on `http://localhost:4173` by default. In the backend terminal, set
+`$env:CORS_ALLOWED_ORIGINS = "http://localhost:5173,http://localhost:4173"` before starting the
+backend if you want to test the preview build in a browser. The preview build still uses
+`VITE_API_BASE_URL` from the `.env` file that was present during `npm.cmd run build`.
 
 ## Upgrading an Existing Unauthenticated Installation
 
@@ -193,10 +229,15 @@ against it until the migration and first-admin bootstrap are complete.
 ### 1. Back up first
 
 ```powershell
+# Run from the repository root. Set $mysqldump if it is not on PATH.
+# $mysqldump = "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe"
+$mysqldump = "mysqldump"
+$mysql = "mysql"
+
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$backup = "C:\expense-tracker\backups\expense_tracker-$stamp.sql"
-& "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe" `
-  -u root -p --single-transaction --routines --triggers `
+New-Item -ItemType Directory -Force -Path .\backups | Out-Null
+$backup = ".\backups\expense_tracker-$stamp.sql"
+& $mysqldump -u root -p --single-transaction --routines --triggers `
   --result-file="$backup" expense_tracker
 Write-Output "Backup written to $backup"
 ```
@@ -209,14 +250,14 @@ This adds the `users` table and a nullable `expenses.owner_id`. Existing rows re
 
 ```powershell
 Get-Content .\database\migrations\001_auth_and_ownership.sql -Raw |
-  & "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root -p expense_tracker
+  & $mysql -u root -p expense_tracker
 ```
 
 Verify the migration:
 
 ```powershell
 $env:MYSQL_PWD = "your-mysql-password"
-& "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root -N -e `
+& $mysql -u root -N -e `
   "SELECT COUNT(*) AS unowned FROM expense_tracker.expenses WHERE owner_id IS NULL;"
 ```
 
@@ -233,15 +274,15 @@ $env:BOOTSTRAP_ADMIN_EMAIL = "you@example.com"
 $env:BOOTSTRAP_ADMIN_PASSWORD = "choose-a-strong-password"
 $env:ASSIGN_LEGACY_EXPENSES = "true"
 
-cd C:\expense-tracker\backend
-mvn spring-boot:run
+cd .\backend
+.\mvnw.cmd spring-boot:run
 ```
 
 Confirm the log reports the created admin and the number of assigned legacy expenses. Query
 to verify:
 
 ```powershell
-& "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root -N -e `
+& $mysql -u root -N -e `
   "SELECT COUNT(*) FROM expense_tracker.users; SELECT COUNT(*) FROM expense_tracker.expenses WHERE owner_id IS NULL;"
 ```
 
@@ -254,7 +295,7 @@ Stop the backend. Apply the second migration:
 
 ```powershell
 Get-Content .\database\migrations\002_enforce_expense_ownership.sql -Raw |
-  & "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root -p expense_tracker
+  & $mysql -u root -p expense_tracker
 ```
 
 Now restart the backend **without** `BOOTSTRAP_ADMIN_*` or `ASSIGN_LEGACY_EXPENSES`.
@@ -281,10 +322,10 @@ Migrations are additive. Apply any that the database has not seen yet, in order:
 
 ```powershell
 Get-Content .\database\migrations\003_user_profile.sql -Raw |
-  & "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root -p expense_tracker
+  & $mysql -u root -p expense_tracker
 
 Get-Content .\database\migrations\004_recurring_expenses.sql -Raw |
-  & "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root -p expense_tracker
+  & $mysql -u root -p expense_tracker
 ```
 
 Migration `003` adds optional profile columns; `004` creates the `recurring_expenses` table.

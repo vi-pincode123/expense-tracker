@@ -6,6 +6,10 @@ backups/
 *.local
 *.log
 
+# Local diagnostic logs written by IDEs/run configurations
+backend/backend-error.txt
+backend/run-log.txt
+
 # Build output and dependencies
 **/target/
 **/node_modules/
@@ -15,3 +19,6 @@ backups/
 .idea/
 .DS_Store
 Thumbs.db
+
+frontend/exp.env
+backend/runlog.txt

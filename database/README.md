@@ -14,33 +14,47 @@ The backend expects the database named `expense_tracker` by default. Override it
 From the project root in PowerShell:
 
 ```powershell
-Get-Content .\database\schema.sql -Raw |
-  & "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root -p
+# mysql.exe is normally on PATH after a standard MySQL install.
+# If it is not, point $mysql at your own installation:
+# $mysql = "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe"
+$mysql = "mysql"
+
+Get-Content .\database\schema.sql -Raw | & $mysql -u root -p
 ```
 
 `database/schema.sql` creates:
 
 - `users`: account identity, BCrypt password hash, role (`ADMIN` or `USER`), active flag,
-  and timestamps.
+  optional profile fields (`phone_number`, `date_of_birth`, `gender`, `address`), and
+  timestamps.
 - `expenses`: owner-scoped transactions. `owner_id` is required and references `users(id)`
   with `ON DELETE RESTRICT`.
+- `recurring_expenses`: owner-scoped recurring schedules with amount, category, description,
+  start date, frequency, next due date, pause state, and last paid date.
 
-The schema intentionally contains no sample users or expenses. Create the first admin with
-the backend bootstrap process described in the root `README.md`.
+The fresh-install schema already includes everything added by migrations 001 through 004;
+the migrations are only needed when upgrading an existing database. The schema intentionally
+contains no sample users or expenses. Create the first admin with the backend bootstrap process
+described in the root `README.md`.
 
 ## Upgrading an Existing Database
 
 Existing installations may have an `expenses` table but no `users` table and no ownership
 column. Use the numbered migrations in order. Do not skip the first-admin bootstrap between
-migrations 001 and 002.
+migrations 001 and 002. Run the commands in this section from the repository root.
 
 ### 1. Back up the database
 
 ```powershell
+# Run from the repository root. Set $mysqldump if it is not on PATH.
+# $mysqldump = "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe"
+$mysqldump = "mysqldump"
+$mysql = "mysql"
+
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$backup = "C:\expense-tracker\backups\expense_tracker-$stamp.sql"
-& "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe" `
-  -u root -p --single-transaction --routines --triggers `
+New-Item -ItemType Directory -Force -Path .\backups | Out-Null
+$backup = ".\backups\expense_tracker-$stamp.sql"
+& $mysqldump -u root -p --single-transaction --routines --triggers `
   --result-file="$backup" expense_tracker
 ```
 
@@ -51,7 +65,7 @@ restore the dump.
 
 ```powershell
 Get-Content .\database\migrations\001_auth_and_ownership.sql -Raw |
-  & "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root -p expense_tracker
+  & $mysql -u root -p expense_tracker
 ```
 
 This adds the `users` table and a nullable `expenses.owner_id`. Existing expense rows are
@@ -77,8 +91,8 @@ $env:BOOTSTRAP_ADMIN_EMAIL = "you@example.com"
 $env:BOOTSTRAP_ADMIN_PASSWORD = "choose-a-strong-password"
 $env:ASSIGN_LEGACY_EXPENSES = "true"
 
-cd C:\expense-tracker\backend
-mvn spring-boot:run
+cd .\backend
+.\mvnw.cmd spring-boot:run
 ```
 
 The startup log should report the created administrator and the number of legacy expenses
@@ -99,7 +113,7 @@ Stop the backend, then enforce ownership:
 
 ```powershell
 Get-Content .\database\migrations\002_enforce_expense_ownership.sql -Raw |
-  & "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root -p expense_tracker
+  & $mysql -u root -p expense_tracker
 ```
 
 `owner_id` is now `NOT NULL`. Restart the backend **without** the bootstrap variables and
@@ -120,24 +134,31 @@ FROM expense_tracker.expenses;
 The counts and totals must match the pre-upgrade values. Then sign in as the admin and verify
 the legacy transactions appear under **My Expenses**.
 
-### 6. Apply migration 004 (recurring expenses)
+### 6. Apply migrations 003 and 004
 
-Migration 004 is additive and does not modify existing tables. Stop the backend, then run:
+Migrations 003 and 004 are additive and do not modify existing data. Stop the backend, then run:
 
 ```powershell
+Get-Content .\database\migrations\003_user_profile.sql -Raw |
+  & $mysql -u root -p expense_tracker
+
 Get-Content .\database\migrations\004_recurring_expenses.sql -Raw |
-  & "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root -p expense_tracker
+  & $mysql -u root -p expense_tracker
 ```
 
-Verify the table and its ownership constraint:
+Migration 003 adds the optional `phone_number`, `date_of_birth`, `gender`, and `address`
+columns to `users`. Migration 004 creates the `recurring_expenses` table.
+
+Verify the profile columns and the recurring table:
 
 ```sql
+SHOW COLUMNS FROM expense_tracker.users;
 SHOW CREATE TABLE expense_tracker.recurring_expenses;
 SELECT COUNT(*) FROM expense_tracker.recurring_expenses;
 ```
 
-The backend uses `ddl-auto=validate`, so it will fail to start until this table exists.
-Existing expenses, users, and totals are untouched.
+The backend uses `ddl-auto=validate`, so it will fail to start until both migrations have been
+applied. Existing expenses, users, and totals are untouched.
 
 ## Migrations
 

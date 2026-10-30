@@ -1,7 +1,14 @@
 import axios from 'axios';
 import { clearStoredAuth, getStoredToken } from './authStorage';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+if (!API_BASE_URL) {
+  throw new Error(
+    'VITE_API_BASE_URL is not set. Copy frontend/.env.example to frontend/.env, set the backend API URL, and restart the Vite dev server.'
+  );
+}
+
 export const UNAUTHORIZED_EVENT = 'expense-tracker:unauthorized';
 
 const api = axios.create({
@@ -60,7 +67,7 @@ export const getApiErrorMessage = (error, fallback) => {
     }
   }
   if (error?.code === 'ERR_NETWORK') {
-    return 'Cannot reach the backend. Make sure it is running on http://localhost:8080.';
+    return `Cannot reach the backend at ${API_BASE_URL}. Make sure it is running and VITE_API_BASE_URL is correct.`;
   }
   return fallback;
 };
